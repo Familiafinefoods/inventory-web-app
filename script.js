@@ -1,6 +1,7 @@
 const video = document.getElementById('video');
 const output = document.getElementById('output');
 let stream = null;
+let scanning = false;
 
 // Acceder a la cámara
 async function startCamera() {
@@ -14,8 +15,9 @@ async function startCamera() {
     }
 }
 
-// Escanear código de barras
-async function scanBarcode() {
+// Escanear código de barras continuamente
+function scanBarcode() {
+    if (!scanning) return;
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
     canvas.width = video.videoWidth;
@@ -26,10 +28,26 @@ async function scanBarcode() {
     
     if (code) {
         output.textContent = `Código detectado: ${code.data}`;
+        scanning = false; // Detener el escaneo tras detectar un código
     } else {
         output.textContent = 'No se detectó ningún código de barras';
+        requestAnimationFrame(scanBarcode); // Continuar escaneando
     }
 }
+
+// Iniciar escaneo
+window.startScanning = function() {
+    if (!scanning) {
+        scanning = true;
+        scanBarcode();
+    }
+};
+
+// Detener escaneo
+window.stopScanning = function() {
+    scanning = false;
+    output.textContent = 'Escaneo detenido';
+};
 
 // Iniciar la cámara cuando se carga la página
 startCamera();
