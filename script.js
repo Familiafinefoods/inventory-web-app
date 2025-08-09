@@ -2,51 +2,77 @@ const video = document.getElementById('video');
 const output = document.getElementById('output');
 let stream = null;
 let scanning = false;
+let lastCode = null;
 
 // Acceder a la cámara
 async function startCamera() {
     try {
         stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: 'environment' } // Usa la cámara trasera
+            video: { 
+                facingMode: 'environment', 
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
         });
         video.srcObject = stream;
+        console.log('Cámara iniciada con éxito. Resolución:', video.videoWidth, 'x', video.videoHeight);
     } catch (err) {
         output.textContent = 'Error al acceder a la cámara: ' + err;
+        console.error('Error al iniciar la cámara:', err);
     }
 }
 
-// Escanear código de barras continuamente
-function scanBarcode() {
-    if (!scanning) return;
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-    const code = jsQR(imageData.data, imageData.width, imageData.height);
-    
-    if (code) {
-        output.textContent = `Código detectado: ${code.data}`;
-        scanning = false; // Detener el escaneo tras detectar un código
-    } else {
-        output.textContent = 'No se detectó ningún código de barras';
-        requestAnimationFrame(scanBarcode); // Continuar escaneando
-    }
-}
-
-// Iniciar escaneo
+// Iniciar escaneo con QuaggaJS
 window.startScanning = function() {
-    if (!scanning) {
-        scanning = true;
-        scanBarcode();
-    }
+    if (scanning) return;
+    scanning = true;
+    console.log('Iniciando escaneo...');
+    Quagga.init({
+        inputStream: {
+            name: 'Live',
+            type: 'LiveStream',
+            target: video,
+            constraints: {
+                facingMode: 'environment',
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
+        },
+        decoder: {
+            readers: ['upc_reader', 'ean_reader'] // Optimizado para UPC-A y EAN-13
+        },
+        locate: true
+    }, function(err) {
+        if (err) {
+            output.textContent = 'Error al iniciar Quagga: ' + err;
+            console.error('Error al iniciar Quagga:', err);
+            scanning = false;
+            return;
+        }
+        console.log('Quagga inicializado');
+        Quagga.start();
+    });
+
+    Quagga.onDetected(function(result) {
+        const code = result.codeResult.code;
+        if (code) {
+            lastCode = code;
+            output.textContent = `Código detectado: ${code}`;
+            console.log('Código detectado:', code, 'Formato:', result.codeResult.format);
+            Quagga.stop();
+            scanning = false;
+        }
+    });
 };
 
 // Detener escaneo
 window.stopScanning = function() {
-    scanning = false;
-    output.textContent = 'Escaneo detenido';
+    if (scanning) {
+        Quagga.stop();
+        scanning = false;
+        output.textContent = lastCode ? `Escaneo detenido. Último código: ${lastCode}` : 'Escaneo detenido';
+        console.log('Escaneo detenido');
+    }
 };
 
 // Iniciar la cámara cuando se carga la página
